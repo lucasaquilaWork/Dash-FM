@@ -57,7 +57,12 @@ def carregar_dados():
                 .str.replace(",", ".", regex=False)
             )
             df[col] = pd.to_numeric(df[col], errors="coerce")
-
+        df.columns = (
+            df.columns
+            .str.strip()          # remove espaços
+            .str.upper()          # tudo maiúsculo
+            .str.replace(" ", "_")  # troca espaço por _
+        )
         df["SEMANA"] = nome
 
         dados_semanas.append(df)
