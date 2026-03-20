@@ -65,7 +65,15 @@ def carregar_dados():
     df_final = pd.concat(dados_semanas, ignore_index=True)
 
     # converter data
-    df_final["DATA"] = pd.to_datetime(df_final["DATA"], dayfirst=True)
+    df_final["DATA"] = df_final["DATA"].astype(str) + "/2026"
+
+    df_final["DATA"] = pd.to_datetime(
+        df_final["DATA"],
+        format="%d/%m/%Y",
+        errors="coerce"
+    )
+    
+    df_final = df_final.dropna(subset=["DATA"])
 
     return df_final
 
