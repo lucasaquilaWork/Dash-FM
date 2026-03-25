@@ -4,10 +4,18 @@ import pandas as pd
 import plotly.express as px
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import time
 
 st.set_page_config(page_title="Dashboard Volumetria", layout="wide")
 
 st.title("📦 Dashboard de Volumetria")
+
+# -----------------------------
+# 🔄 BOTÃO DE ATUALIZAÇÃO
+# -----------------------------
+if st.button("🔄 Atualizar dados"):
+    st.cache_data.clear()
+    st.rerun()
 
 # -----------------------------
 # 🔐 CONEXÃO
@@ -28,116 +36,116 @@ SPREADSHEET_ID = "1OtPl6T-ocUU9UVm81v4Feu-xX4OvLyuENLHutQwuiwA"
 spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
 # -----------------------------
-# 📥 CARREGAR DADOS (BLINDADO)
+# 📥 CARREGAR DADOS COM RETRY
 # -----------------------------
 @st.cache_data(ttl=600)
 def carregar_dados():
-    abas = spreadsheet.worksheets()
-    dados_semanas = []
-
-    for aba in abas:
-        nome = aba.title
-
-        if not nome.startswith("W-"):
-            continue
-
+    for tentativa in range(3):  # retry automático
         try:
-            dados = aba.get_all_values()
+            abas = spreadsheet.worksheets()
+            dados_semanas = []
 
-            if not dados or len(dados) < 2:
-                continue
+            for aba in abas:
+                nome = aba.title
 
-            df_raw = pd.DataFrame(dados)
+                if not nome.startswith("W-"):
+                    continue
 
-            # remover linhas totalmente vazias
-            df_raw = df_raw.replace("", None).dropna(how="all")
+                try:
+                    dados = aba.get_all_values()
 
-            # garantir que tem pelo menos 2 colunas
-            if df_raw.shape[1] < 2:
-                continue
+                    if not dados or len(dados) < 2:
+                        continue
 
-            # primeira linha vira header
-            df_raw.columns = df_raw.iloc[0]
-            df_raw = df_raw[1:]
+                    df_raw = pd.DataFrame(dados)
+                    df_raw = df_raw.replace("", None).dropna(how="all")
 
-            df_raw = df_raw.replace("", None).dropna(how="all")
+                    if df_raw.shape[1] < 2:
+                        continue
+
+                    df_raw.columns = df_raw.iloc[0]
+                    df_raw = df_raw[1:]
+                    df_raw = df_raw.replace("", None).dropna(how="all")
+
+                    primeira_coluna = df_raw.columns[0]
+
+                    df = df_raw.set_index(primeira_coluna).T.reset_index()
+                    df.columns = ["DATA"] + list(df.columns[1:])
+
+                    df.columns = (
+                        pd.Index(df.columns)
+                        .astype(str)
+                        .str.strip()
+                        .str.upper()
+                        .str.replace(" ", "_")
+                    )
+
+                    df = df.rename(columns={"PROGAMADO": "PROGRAMADO"})
+
+                    colunas_esperadas = ["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]
+
+                    if not all(col in df.columns for col in colunas_esperadas):
+                        continue
+
+                    for col in df.columns:
+                        if col not in ["DATA", "SEMANA"]:
+                            df[col] = (
+                                df[col]
+                                .astype(str)
+                                .str.replace(".", "", regex=False)
+                                .str.replace(",", ".", regex=False)
+                            )
+                            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+                    df["SEMANA"] = nome
+
+                    dados_semanas.append(df)
+
+                except:
+                    continue
+
+            if not dados_semanas:
+                return pd.DataFrame()
+
+            df_final = pd.concat(dados_semanas, ignore_index=True)
 
             # -----------------------------
-            # 🔥 TRANSFORMAÇÃO SEGURA
+            # 📅 TRATAMENTO DE DATA
             # -----------------------------
-            primeira_coluna = df_raw.columns[0]
+            ano = datetime.now().year
 
-            df = df_raw.set_index(primeira_coluna).T.reset_index()
+            df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
+            df_final["DATA"] = df_final["DATA"] + f"/{ano}"
 
-            # força nome DATA
-            df.columns = ["DATA"] + list(df.columns[1:])
-
-            # padronizar nomes
-            df.columns = (
-                pd.Index(df.columns)
-                .astype(str)
-                .str.strip()
-                .str.upper()
-                .str.replace(" ", "_")
+            df_final["DATA"] = pd.to_datetime(
+                df_final["DATA"],
+                format="%d/%m/%Y",
+                errors="coerce"
             )
 
-            # corrigir erro comum
-            df = df.rename(columns={"PROGAMADO": "PROGRAMADO"})
+            df_final = df_final.dropna(subset=["DATA"])
 
-            # validar colunas essenciais
-            colunas_esperadas = ["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]
-
-            if not all(col in df.columns for col in colunas_esperadas):
-                st.warning(f"⚠️ Aba {nome} ignorada (colunas faltando)")
-                continue
-
-            # limpar números
-            for col in df.columns:
-                if col not in ["DATA", "SEMANA"]:
-                    df[col] = (
-                        df[col]
-                        .astype(str)
-                        .str.replace(".", "", regex=False)
-                        .str.replace(",", ".", regex=False)
-                    )
-                    df[col] = pd.to_numeric(df[col], errors="coerce")
-
-            df["SEMANA"] = nome
-
-            dados_semanas.append(df)
+            return df_final
 
         except Exception as e:
-            st.warning(f"❌ Erro na aba {nome}: {e}")
+            time.sleep(2)
 
-    # se nenhuma aba válida
-    if not dados_semanas:
-        st.error("❌ Nenhuma aba válida encontrada")
-        return pd.DataFrame()
-
-    df_final = pd.concat(dados_semanas, ignore_index=True)
-
-    # -----------------------------
-    # 📅 TRATAMENTO DE DATA
-    # -----------------------------
-    ano = datetime.now().year
-
-    df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
-    df_final["DATA"] = df_final["DATA"] + f"/{ano}"
-
-    df_final["DATA"] = pd.to_datetime(
-        df_final["DATA"],
-        format="%d/%m/%Y",
-        errors="coerce"
-    )
-
-    df_final = df_final.dropna(subset=["DATA"])
-
-    return df_final
+    return pd.DataFrame()
 
 
-df = carregar_dados()
+# -----------------------------
+# 🧠 LOAD COM PROTEÇÃO
+# -----------------------------
+try:
+    with st.spinner("Carregando dados..."):
+        df = carregar_dados()
 
-if df.empty:
+    if df.empty:
+        st.warning("⚠️ Sem dados disponíveis no momento")
+        st.stop()
+
+except Exception:
+    st.error("❌ Erro ao carregar dados. Tente novamente.")
     st.stop()
 
 # -----------------------------
@@ -159,6 +167,11 @@ if dia_selecionado != "TOTAL":
     ]
 else:
     df_filtrado = df_semana
+
+# FAIL SAFE
+if df_filtrado.empty:
+    st.warning("⚠️ Sem dados para o filtro selecionado")
+    st.stop()
 
 # -----------------------------
 # 📊 KPIs
@@ -261,34 +274,7 @@ else:
     totais = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
     totais.columns = ["TIPO", "VALOR"]
 
-    fig = px.bar(
-        totais,
-        x="TIPO",
-        y="VALOR",
-        color="TIPO",
-        color_discrete_map={
-            "PROGRAMADO": "#1f77b4",
-            "RECEBIDO": "#2ca02c",
-            "DIFERENÇA": "#d62728"
-        }
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    df_acum = df_plot.sort_values("DATA").copy()
-    df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
-    df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
-
-    fig = px.line(
-        df_acum.melt(
-            id_vars="DATA_STR",
-            value_vars=["PROG_ACUM", "REC_ACUM"],
-            var_name="TIPO",
-            value_name="VALOR"
-        ),
-        x="DATA_STR",
-        y="VALOR",
-        color="TIPO"
-    )
+    fig = px.bar(totais, x="TIPO", y="VALOR", color="TIPO")
     st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
