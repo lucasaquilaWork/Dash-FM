@@ -281,7 +281,7 @@ else:
         color_discrete_map={
         "PROGRAMADO": "#1f77b4",
         "RECEBIDO": "#2ca02c"
-    }
+        }
     )
 
     fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
@@ -300,7 +300,7 @@ else:
         color_discrete_map={
         "Positivo": "green",
         "Negativo": "red"
-    }
+        }
     )
 
     fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
