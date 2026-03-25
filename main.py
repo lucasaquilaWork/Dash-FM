@@ -36,11 +36,11 @@ SPREADSHEET_ID = "1OtPl6T-ocUU9UVm81v4Feu-xX4OvLyuENLHutQwuiwA"
 spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
 # -----------------------------
-# 📥 CARREGAR DADOS COM RETRY
+# 📥 CARREGAR DADOS
 # -----------------------------
 @st.cache_data(ttl=600)
 def carregar_dados():
-    for tentativa in range(3):  # retry automático
+    for tentativa in range(3):
         try:
             abas = spreadsheet.worksheets()
             dados_semanas = []
@@ -98,7 +98,6 @@ def carregar_dados():
                             df[col] = pd.to_numeric(df[col], errors="coerce")
 
                     df["SEMANA"] = nome
-
                     dados_semanas.append(df)
 
                 except:
@@ -109,11 +108,7 @@ def carregar_dados():
 
             df_final = pd.concat(dados_semanas, ignore_index=True)
 
-            # -----------------------------
-            # 📅 TRATAMENTO DE DATA
-            # -----------------------------
             ano = datetime.now().year
-
             df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
             df_final["DATA"] = df_final["DATA"] + f"/{ano}"
 
@@ -127,29 +122,29 @@ def carregar_dados():
 
             return df_final
 
-        except Exception as e:
+        except:
             time.sleep(2)
 
     return pd.DataFrame()
 
 
 # -----------------------------
-# 🧠 LOAD COM PROTEÇÃO
+# LOAD PROTEGIDO
 # -----------------------------
 try:
     with st.spinner("Carregando dados..."):
         df = carregar_dados()
 
     if df.empty:
-        st.warning("⚠️ Sem dados disponíveis no momento")
+        st.warning("⚠️ Sem dados disponíveis")
         st.stop()
 
-except Exception:
-    st.error("❌ Erro ao carregar dados. Tente novamente.")
+except:
+    st.error("Erro ao carregar dados")
     st.stop()
 
 # -----------------------------
-# 🎛 FILTROS
+# FILTROS
 # -----------------------------
 semanas = sorted(df["SEMANA"].unique())
 semana_selecionada = st.selectbox("Semana", semanas)
@@ -168,13 +163,12 @@ if dia_selecionado != "TOTAL":
 else:
     df_filtrado = df_semana
 
-# FAIL SAFE
 if df_filtrado.empty:
-    st.warning("⚠️ Sem dados para o filtro selecionado")
+    st.warning("Sem dados")
     st.stop()
 
 # -----------------------------
-# 📊 KPIs
+# KPIs
 # -----------------------------
 st.subheader("📊 Indicadores")
 
@@ -191,17 +185,15 @@ df_plot = df_filtrado.copy()
 df_plot["DATA_STR"] = df_plot["DATA"].dt.strftime("%d/%m")
 
 # -----------------------------
-# 🔎 VISÃO DIA (COMPLETA)
+# VISÃO DIA
 # -----------------------------
 if dia_selecionado != "TOTAL":
 
     st.warning("📍 Visualizando um único dia")
 
-    # =============================
-    # 🔵 GRÁFICO 1 - PROGRAMADO vs RECEBIDO
-    # =============================
     col1, col2 = st.columns(2)
 
+    # PROGRAMADO vs RECEBIDO
     with col1:
         df_bar = df_plot.melt(
             id_vars="DATA_STR",
@@ -215,18 +207,17 @@ if dia_selecionado != "TOTAL":
             x="TIPO",
             y="VALOR",
             color="TIPO",
-            text_auto=True,
+            text="VALOR",
             color_discrete_map={
                 "PROGRAMADO": "#1f77b4",
                 "RECEBIDO": "#2ca02c"
             }
         )
 
+        fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
         st.plotly_chart(fig, use_container_width=True)
 
-    # =============================
-    # 🔴 GRÁFICO 2 - DIFERENÇA
-    # =============================
+    # DIFERENÇA
     with col2:
         df_diff = df_plot.copy()
 
@@ -239,18 +230,17 @@ if dia_selecionado != "TOTAL":
             x="DATA_STR",
             y="DIFERENÇA",
             color="COR",
-            text_auto=True,
+            text="DIFERENÇA",
             color_discrete_map={
                 "Positivo": "green",
                 "Negativo": "red"
             }
         )
 
+        fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
         st.plotly_chart(fig, use_container_width=True)
 
-    # =============================
-    # 🟣 GRÁFICO 3 - VISÃO UNIFICADA
-    # =============================
+    # CONSOLIDADO
     st.subheader("📊 Visão consolidada do dia")
 
     df_total = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
@@ -261,37 +251,36 @@ if dia_selecionado != "TOTAL":
         x="TIPO",
         y="VALOR",
         color="TIPO",
-        text_auto=True,
-        color_discrete_map={
-            "PROGRAMADO": "#1f77b4",
-            "RECEBIDO": "#2ca02c",
-            "DIFERENÇA": "#d62728"
-        }
+        text="VALOR"
     )
 
-    st.plotly_chart(fig, use_container_width=True)# -----------------------------
-# 📊 VISÃO SEMANA
+    fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
+    st.plotly_chart(fig, use_container_width=True)
+
+# -----------------------------
+# VISÃO SEMANA
 # -----------------------------
 else:
 
     st.success("📊 Visão completa da semana")
 
+    df_melt = df_plot.melt(
+        id_vars="DATA_STR",
+        value_vars=["PROGRAMADO", "RECEBIDO"],
+        var_name="TIPO",
+        value_name="VALOR"
+    )
+
     fig = px.bar(
-        df_plot.melt(
-            id_vars="DATA_STR",
-            value_vars=["PROGRAMADO", "RECEBIDO"],
-            var_name="TIPO",
-            value_name="VALOR"
-        ),
+        df_melt,
         x="DATA_STR",
         y="VALOR",
         color="TIPO",
         barmode="group",
-        color_discrete_map={
-            "PROGRAMADO": "#1f77b4",
-            "RECEBIDO": "#2ca02c"
-        }
+        text="VALOR"
     )
+
+    fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
     st.plotly_chart(fig, use_container_width=True)
 
     df_plot["COR"] = df_plot["DIFERENÇA"].apply(
@@ -303,21 +292,14 @@ else:
         x="DATA_STR",
         y="DIFERENÇA",
         color="COR",
-        color_discrete_map={
-            "Positivo": "green",
-            "Negativo": "red"
-        }
+        text="DIFERENÇA"
     )
-    st.plotly_chart(fig, use_container_width=True)
 
-    totais = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
-    totais.columns = ["TIPO", "VALOR"]
-
-    fig = px.bar(totais, x="TIPO", y="VALOR", color="TIPO")
+    fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
     st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# 📋 TABELA
+# TABELA
 # -----------------------------
 st.subheader("📋 Dados")
 st.dataframe(df_filtrado)
