@@ -28,7 +28,7 @@ SPREADSHEET_ID = "1OtPl6T-ocUU9UVm81v4Feu-xX4OvLyuENLHutQwuiwA"
 spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
 # -----------------------------
-# 📥 CARREGAR DADOS
+# 📥 CARREGAR DADOS (ROBUSTO)
 # -----------------------------
 @st.cache_data(ttl=600)
 def carregar_dados():
@@ -42,23 +42,38 @@ def carregar_dados():
             continue
 
         try:
-            df_raw = pd.DataFrame(aba.get_all_records())
+            dados = aba.get_all_values()
 
-            if df_raw.empty:
+            # ignorar abas vazias
+            if not dados or len(dados) < 2:
                 continue
 
+            df_raw = pd.DataFrame(dados)
+
+            # primeira linha vira header
+            df_raw.columns = df_raw.iloc[0]
+            df_raw = df_raw[1:]
+
+            # remover linhas vazias
+            df_raw = df_raw.dropna(how="all")
+
+            # transformar estrutura
             df = df_raw.set_index(df_raw.columns[0]).T.reset_index()
             df = df.rename(columns={"index": "DATA"})
 
+            # padronizar colunas
             df.columns = (
                 df.columns
+                .astype(str)
                 .str.strip()
                 .str.upper()
                 .str.replace(" ", "_")
             )
 
+            # corrigir erro comum
             df = df.rename(columns={"PROGAMADO": "PROGRAMADO"})
 
+            # limpar números
             for col in df.columns:
                 if col not in ["DATA", "SEMANA"]:
                     df[col] = (
@@ -74,10 +89,11 @@ def carregar_dados():
             dados_semanas.append(df)
 
         except Exception as e:
-            st.write(f"Erro na aba {nome}: {e}")
+            st.write(f"❌ Erro na aba {nome}: {e}")
 
     df_final = pd.concat(dados_semanas, ignore_index=True)
 
+    # corrigir DATA
     ano = datetime.now().year
     df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
     df_final["DATA"] = df_final["DATA"] + f"/{ano}"
@@ -129,15 +145,11 @@ col1.metric("Programado", f"{prog:,.0f}")
 col2.metric("Recebido", f"{rec:,.0f}")
 col3.metric("Diferença", f"{dif:,.0f}")
 
-# =============================
-# 🧠 LÓGICA INTELIGENTE DE VISÃO
-# =============================
-
 df_plot = df_filtrado.copy()
 df_plot["DATA_STR"] = df_plot["DATA"].dt.strftime("%d/%m")
 
 # -----------------------------
-# 🔎 VISÃO POR DIA
+# 🔎 VISÃO DIA
 # -----------------------------
 if dia_selecionado != "TOTAL":
 
@@ -159,8 +171,7 @@ if dia_selecionado != "TOTAL":
             color_discrete_map={
                 "PROGRAMADO": "#1f77b4",
                 "RECEBIDO": "#2ca02c"
-            },
-            title="Programado vs Recebido"
+            }
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -173,21 +184,18 @@ if dia_selecionado != "TOTAL":
             color_discrete_map={
                 "Positivo": "green",
                 "Negativo": "red"
-            },
-            title="Diferença"
+            }
         )
         st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# 📊 VISÃO TOTAL DA SEMANA
+# 📊 VISÃO SEMANA
 # -----------------------------
 else:
 
-    st.success("📊 Visualização completa da semana")
+    st.success("📊 Visão completa da semana")
 
-    # Programado vs Recebido
-    st.subheader("📊 Programado x Recebido")
-
+    # comparativo
     fig = px.bar(
         df_plot.melt(
             id_vars="DATA_STR",
@@ -206,9 +214,7 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Diferença
-    st.subheader("📉 Diferença")
-
+    # diferença
     df_plot["COR"] = df_plot["DIFERENÇA"].apply(
         lambda x: "Positivo" if x >= 0 else "Negativo"
     )
@@ -225,9 +231,7 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Backlog
-    st.subheader("📦 Backlog")
-
+    # backlog
     df_plot["BACKLOG"] = df_plot["PROGRAMADO"] - df_plot["RECEBIDO"]
 
     fig = px.bar(
@@ -238,9 +242,7 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Total
-    st.subheader("📊 Total da Semana")
-
+    # total
     totais = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
     totais.columns = ["TIPO", "VALOR"]
 
@@ -257,9 +259,7 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Acumulado
-    st.subheader("📈 Acumulado")
-
+    # acumulado
     df_acum = df_plot.sort_values("DATA").copy()
     df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
     df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
