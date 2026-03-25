@@ -1,6 +1,7 @@
 import streamlit as st
 import gspread
 import pandas as pd
+import plotly.express as px
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -49,7 +50,6 @@ def carregar_dados():
             df = df_raw.set_index(df_raw.columns[0]).T.reset_index()
             df = df.rename(columns={"index": "DATA"})
 
-            # padronizar colunas
             df.columns = (
                 df.columns
                 .str.strip()
@@ -57,10 +57,8 @@ def carregar_dados():
                 .str.replace(" ", "_")
             )
 
-            # corrigir erro comum
             df = df.rename(columns={"PROGAMADO": "PROGRAMADO"})
 
-            # limpar números
             for col in df.columns:
                 if col not in ["DATA", "SEMANA"]:
                     df[col] = (
@@ -80,7 +78,6 @@ def carregar_dados():
 
     df_final = pd.concat(dados_semanas, ignore_index=True)
 
-    # corrigir DATA
     ano = datetime.now().year
     df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
     df_final["DATA"] = df_final["DATA"] + f"/{ano}"
@@ -99,22 +96,17 @@ def carregar_dados():
 df = carregar_dados()
 
 # -----------------------------
-# 🎛 FILTRO DE SEMANA
+# 🎛 FILTROS
 # -----------------------------
 semanas = sorted(df["SEMANA"].unique())
-semana_selecionada = st.selectbox("Selecione a semana", semanas)
+semana_selecionada = st.selectbox("Semana", semanas)
 
 df_semana = df[df["SEMANA"] == semana_selecionada]
 
-# -----------------------------
-# 📅 FILTRO DE DIA
-# -----------------------------
 dias = df_semana["DATA"].dt.strftime("%d/%m").unique().tolist()
 dias = sorted(dias, key=lambda x: pd.to_datetime(x, format="%d/%m"))
 
-opcoes = ["TOTAL"] + dias
-
-dia_selecionado = st.selectbox("Selecione o dia", opcoes)
+dia_selecionado = st.selectbox("Dia", ["TOTAL"] + dias)
 
 if dia_selecionado != "TOTAL":
     df_filtrado = df_semana[
@@ -128,68 +120,139 @@ else:
 # -----------------------------
 st.subheader("📊 Indicadores")
 
+prog = df_filtrado["PROGRAMADO"].sum()
+rec = df_filtrado["RECEBIDO"].sum()
+dif = df_filtrado["DIFERENÇA"].sum()
+
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Programado", f"{df_filtrado['PROGRAMADO'].sum():,.0f}")
-col2.metric("Recebido", f"{df_filtrado['RECEBIDO'].sum():,.0f}")
-col3.metric("Diferença", f"{df_filtrado['DIFERENÇA'].sum():,.0f}")
+col1.metric("Programado", f"{prog:,.0f}")
+col2.metric("Recebido", f"{rec:,.0f}")
+col3.metric("Diferença", f"{dif:,.0f}")
 
 # -----------------------------
-# 📊 GRÁFICO 1 - BARRA COMPARATIVA
+# 📊 GRÁFICO 1
 # -----------------------------
-st.subheader("📊 Programado x Recebido por Dia")
+st.subheader("📊 Programado x Recebido")
 
-st.bar_chart(
-    df_semana.set_index("DATA")[["PROGRAMADO", "RECEBIDO"]]
+df_plot = df_semana.copy()
+df_plot["DATA_STR"] = df_plot["DATA"].dt.strftime("%d/%m")
+
+df_melt = df_plot.melt(
+    id_vars="DATA_STR",
+    value_vars=["PROGRAMADO", "RECEBIDO"],
+    var_name="TIPO",
+    value_name="VALOR"
 )
 
-# -----------------------------
-# 📉 GRÁFICO 2 - DIFERENÇA
-# -----------------------------
-st.subheader("📉 Diferença por Dia")
-
-st.bar_chart(
-    df_semana.set_index("DATA")["DIFERENÇA"]
+fig = px.bar(
+    df_melt,
+    x="DATA_STR",
+    y="VALOR",
+    color="TIPO",
+    barmode="group",
+    color_discrete_map={
+        "PROGRAMADO": "#1f77b4",
+        "RECEBIDO": "#2ca02c"
+    }
 )
 
-# -----------------------------
-# 📦 GRÁFICO 3 - BACKLOG
-# -----------------------------
-df_backlog = df_semana.copy()
-df_backlog["BACKLOG"] = df_backlog["PROGRAMADO"] - df_backlog["RECEBIDO"]
+st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("📦 Backlog por Dia")
+# -----------------------------
+# 📉 DIFERENÇA
+# -----------------------------
+st.subheader("📉 Diferença")
 
-st.bar_chart(
-    df_backlog.set_index("DATA")["BACKLOG"]
+df_plot["COR"] = df_plot["DIFERENÇA"].apply(
+    lambda x: "Positivo" if x >= 0 else "Negativo"
 )
 
+fig = px.bar(
+    df_plot,
+    x="DATA_STR",
+    y="DIFERENÇA",
+    color="COR",
+    color_discrete_map={
+        "Positivo": "green",
+        "Negativo": "red"
+    }
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
 # -----------------------------
-# 📊 GRÁFICO 4 - TOTAL SEMANA
+# 📦 BACKLOG
+# -----------------------------
+st.subheader("📦 Backlog")
+
+df_plot["BACKLOG"] = df_plot["PROGRAMADO"] - df_plot["RECEBIDO"]
+
+fig = px.bar(
+    df_plot,
+    x="DATA_STR",
+    y="BACKLOG",
+    color_discrete_sequence=["orange"]
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# -----------------------------
+# 📊 TOTAL
 # -----------------------------
 st.subheader("📊 Total da Semana")
 
-totais = df_semana[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum()
+totais = df_semana[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
+totais.columns = ["TIPO", "VALOR"]
 
-st.bar_chart(totais)
+fig = px.bar(
+    totais,
+    x="TIPO",
+    y="VALOR",
+    color="TIPO",
+    color_discrete_map={
+        "PROGRAMADO": "#1f77b4",
+        "RECEBIDO": "#2ca02c",
+        "DIFERENÇA": "#d62728"
+    }
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# 📈 GRÁFICO 5 - ACUMULADO
+# 📈 ACUMULADO
 # -----------------------------
-st.subheader("📈 Acumulado da Semana")
+st.subheader("📈 Acumulado")
 
 df_acum = df_semana.sort_values("DATA").copy()
+df_acum["DATA_STR"] = df_acum["DATA"].dt.strftime("%d/%m")
 
 df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
 df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
 
-st.line_chart(
-    df_acum.set_index("DATA")[["PROG_ACUM", "REC_ACUM"]]
+df_melt = df_acum.melt(
+    id_vars="DATA_STR",
+    value_vars=["PROG_ACUM", "REC_ACUM"],
+    var_name="TIPO",
+    value_name="VALOR"
 )
+
+fig = px.line(
+    df_melt,
+    x="DATA_STR",
+    y="VALOR",
+    color="TIPO",
+    color_discrete_map={
+        "PROG_ACUM": "#1f77b4",
+        "REC_ACUM": "#2ca02c"
+    }
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
 # 📋 TABELA
 # -----------------------------
-st.subheader("📋 Dados detalhados")
+st.subheader("📋 Dados")
 
 st.dataframe(df_filtrado)
