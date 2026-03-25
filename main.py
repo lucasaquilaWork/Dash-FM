@@ -10,7 +10,7 @@ st.set_page_config(page_title="Dashboard Volumetria", layout="wide")
 st.title("📦 Dashboard de Volumetria")
 
 # -----------------------------
-# 🔐 CONEXÃO COM GOOGLE SHEETS
+# 🔐 CONEXÃO
 # -----------------------------
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -28,7 +28,7 @@ SPREADSHEET_ID = "1OtPl6T-ocUU9UVm81v4Feu-xX4OvLyuENLHutQwuiwA"
 spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
 # -----------------------------
-# 📥 CARREGAR DADOS (ROBUSTO)
+# 📥 CARREGAR DADOS (BLINDADO)
 # -----------------------------
 @st.cache_data(ttl=600)
 def carregar_dados():
@@ -44,26 +44,37 @@ def carregar_dados():
         try:
             dados = aba.get_all_values()
 
-            # ignorar abas vazias
             if not dados or len(dados) < 2:
                 continue
 
             df_raw = pd.DataFrame(dados)
 
+            # remover linhas totalmente vazias
+            df_raw = df_raw.replace("", None).dropna(how="all")
+
+            # garantir que tem pelo menos 2 colunas
+            if df_raw.shape[1] < 2:
+                continue
+
             # primeira linha vira header
             df_raw.columns = df_raw.iloc[0]
             df_raw = df_raw[1:]
 
-            # remover linhas vazias
-            df_raw = df_raw.dropna(how="all")
+            df_raw = df_raw.replace("", None).dropna(how="all")
 
-            # transformar estrutura
-            df = df_raw.set_index(df_raw.columns[0]).T.reset_index()
-            df = df.rename(columns={"index": "DATA"})
+            # -----------------------------
+            # 🔥 TRANSFORMAÇÃO SEGURA
+            # -----------------------------
+            primeira_coluna = df_raw.columns[0]
 
-            # padronizar colunas
+            df = df_raw.set_index(primeira_coluna).T.reset_index()
+
+            # força nome DATA
+            df.columns = ["DATA"] + list(df.columns[1:])
+
+            # padronizar nomes
             df.columns = (
-                df.columns
+                pd.Index(df.columns)
                 .astype(str)
                 .str.strip()
                 .str.upper()
@@ -72,6 +83,13 @@ def carregar_dados():
 
             # corrigir erro comum
             df = df.rename(columns={"PROGAMADO": "PROGRAMADO"})
+
+            # validar colunas essenciais
+            colunas_esperadas = ["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]
+
+            if not all(col in df.columns for col in colunas_esperadas):
+                st.warning(f"⚠️ Aba {nome} ignorada (colunas faltando)")
+                continue
 
             # limpar números
             for col in df.columns:
@@ -89,12 +107,20 @@ def carregar_dados():
             dados_semanas.append(df)
 
         except Exception as e:
-            st.write(f"❌ Erro na aba {nome}: {e}")
+            st.warning(f"❌ Erro na aba {nome}: {e}")
+
+    # se nenhuma aba válida
+    if not dados_semanas:
+        st.error("❌ Nenhuma aba válida encontrada")
+        return pd.DataFrame()
 
     df_final = pd.concat(dados_semanas, ignore_index=True)
 
-    # corrigir DATA
+    # -----------------------------
+    # 📅 TRATAMENTO DE DATA
+    # -----------------------------
     ano = datetime.now().year
+
     df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
     df_final["DATA"] = df_final["DATA"] + f"/{ano}"
 
@@ -110,6 +136,9 @@ def carregar_dados():
 
 
 df = carregar_dados()
+
+if df.empty:
+    st.stop()
 
 # -----------------------------
 # 🎛 FILTROS
@@ -195,7 +224,6 @@ else:
 
     st.success("📊 Visão completa da semana")
 
-    # comparativo
     fig = px.bar(
         df_plot.melt(
             id_vars="DATA_STR",
@@ -214,7 +242,6 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # diferença
     df_plot["COR"] = df_plot["DIFERENÇA"].apply(
         lambda x: "Positivo" if x >= 0 else "Negativo"
     )
@@ -231,7 +258,6 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # backlog
     df_plot["BACKLOG"] = df_plot["PROGRAMADO"] - df_plot["RECEBIDO"]
 
     fig = px.bar(
@@ -242,7 +268,6 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # total
     totais = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
     totais.columns = ["TIPO", "VALOR"]
 
@@ -259,7 +284,6 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # acumulado
     df_acum = df_plot.sort_values("DATA").copy()
     df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
     df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
@@ -273,11 +297,7 @@ else:
         ),
         x="DATA_STR",
         y="VALOR",
-        color="TIPO",
-        color_discrete_map={
-            "PROG_ACUM": "#1f77b4",
-            "REC_ACUM": "#2ca02c"
-        }
+        color="TIPO"
     )
     st.plotly_chart(fig, use_container_width=True)
 
