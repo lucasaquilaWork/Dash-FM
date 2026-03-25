@@ -199,37 +199,51 @@ if dia_selecionado != "TOTAL":
 
     col1, col2 = st.columns(2)
 
+    # 🔵 Programado vs Recebido
     with col1:
+        df_bar = df_plot.melt(
+            id_vars="DATA_STR",
+            value_vars=["PROGRAMADO", "RECEBIDO"],
+            var_name="TIPO",
+            value_name="VALOR"
+        )
+
         fig = px.bar(
-            df_plot.melt(
-                id_vars="DATA_STR",
-                value_vars=["PROGRAMADO", "RECEBIDO"],
-                var_name="TIPO",
-                value_name="VALOR"
-            ),
+            df_bar,
             x="TIPO",
             y="VALOR",
             color="TIPO",
             color_discrete_map={
                 "PROGRAMADO": "#1f77b4",
                 "RECEBIDO": "#2ca02c"
-            }
+            },
+            text_auto=True
         )
+
         st.plotly_chart(fig, use_container_width=True)
 
+    # 🔴 Diferença (MESMO PARA UM DIA)
     with col2:
+
+        df_diff = df_plot.copy()
+
+        df_diff["COR"] = df_diff["DIFERENÇA"].apply(
+            lambda x: "Positivo" if x >= 0 else "Negativo"
+        )
+
         fig = px.bar(
-            df_plot,
+            df_diff,
             x="DATA_STR",
             y="DIFERENÇA",
-            color=df_plot["DIFERENÇA"].apply(lambda x: "Positivo" if x >= 0 else "Negativo"),
+            color="COR",
             color_discrete_map={
                 "Positivo": "green",
                 "Negativo": "red"
-            }
+            },
+            text_auto=True
         )
-        st.plotly_chart(fig, use_container_width=True)
 
+        st.plotly_chart(fig, use_container_width=True)
 # -----------------------------
 # 📊 VISÃO SEMANA
 # -----------------------------
