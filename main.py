@@ -258,16 +258,6 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    df_plot["BACKLOG"] = df_plot["PROGRAMADO"] - df_plot["RECEBIDO"]
-
-    fig = px.bar(
-        df_plot,
-        x="DATA_STR",
-        y="BACKLOG",
-        color_discrete_sequence=["orange"]
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
     totais = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
     totais.columns = ["TIPO", "VALOR"]
 
