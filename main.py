@@ -277,7 +277,7 @@ else:
         y="VALOR",
         color="TIPO",
         barmode="group",
-        text="VALOR"
+        text="VALOR",
         color_discrete_map={
         "PROGRAMADO": "#1f77b4",
         "RECEBIDO": "#2ca02c"
@@ -296,7 +296,7 @@ else:
         x="DATA_STR",
         y="DIFERENÇA",
         color="COR",
-        text="DIFERENÇA"
+        text="DIFERENÇA",
         color_discrete_map={
         "Positivo": "green",
         "Negativo": "red"
