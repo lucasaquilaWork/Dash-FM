@@ -191,30 +191,73 @@ df_plot = df_filtrado.copy()
 df_plot["DATA_STR"] = df_plot["DATA"].dt.strftime("%d/%m")
 
 # -----------------------------
-# 🔎 VISÃO DIA (UNIFICADA)
+# 🔎 VISÃO DIA (COMPLETA)
 # -----------------------------
 if dia_selecionado != "TOTAL":
 
     st.warning("📍 Visualizando um único dia")
 
-    # preparar dados
-    df_dia = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
-    df_dia.columns = ["TIPO", "VALOR"]
+    # =============================
+    # 🔵 GRÁFICO 1 - PROGRAMADO vs RECEBIDO
+    # =============================
+    col1, col2 = st.columns(2)
 
-    # cor inteligente
-    def cor(row):
-        if row["TIPO"] == "PROGRAMADO":
-            return "#1f77b4"
-        elif row["TIPO"] == "RECEBIDO":
-            return "#2ca02c"
-        else:
-            return "green" if row["VALOR"] >= 0 else "red"
+    with col1:
+        df_bar = df_plot.melt(
+            id_vars="DATA_STR",
+            value_vars=["PROGRAMADO", "RECEBIDO"],
+            var_name="TIPO",
+            value_name="VALOR"
+        )
 
-    df_dia["COR"] = df_dia.apply(cor, axis=1)
+        fig = px.bar(
+            df_bar,
+            x="TIPO",
+            y="VALOR",
+            color="TIPO",
+            text_auto=True,
+            color_discrete_map={
+                "PROGRAMADO": "#1f77b4",
+                "RECEBIDO": "#2ca02c"
+            }
+        )
 
-    # gráfico único
+        st.plotly_chart(fig, use_container_width=True)
+
+    # =============================
+    # 🔴 GRÁFICO 2 - DIFERENÇA
+    # =============================
+    with col2:
+        df_diff = df_plot.copy()
+
+        df_diff["COR"] = df_diff["DIFERENÇA"].apply(
+            lambda x: "Positivo" if x >= 0 else "Negativo"
+        )
+
+        fig = px.bar(
+            df_diff,
+            x="DATA_STR",
+            y="DIFERENÇA",
+            color="COR",
+            text_auto=True,
+            color_discrete_map={
+                "Positivo": "green",
+                "Negativo": "red"
+            }
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    # =============================
+    # 🟣 GRÁFICO 3 - VISÃO UNIFICADA
+    # =============================
+    st.subheader("📊 Visão consolidada do dia")
+
+    df_total = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
+    df_total.columns = ["TIPO", "VALOR"]
+
     fig = px.bar(
-        df_dia,
+        df_total,
         x="TIPO",
         y="VALOR",
         color="TIPO",
@@ -226,15 +269,7 @@ if dia_selecionado != "TOTAL":
         }
     )
 
-    # sobrescrever cor da diferença dinamicamente
-    fig.for_each_trace(
-        lambda t: t.update(marker_color=[
-            df_dia[df_dia["TIPO"] == t.name]["COR"].values[0]
-        ])
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-# -----------------------------
+    st.plotly_chart(fig, use_container_width=True)# -----------------------------
 # 📊 VISÃO SEMANA
 # -----------------------------
 else:
