@@ -278,6 +278,10 @@ else:
         color="TIPO",
         barmode="group",
         text="VALOR"
+        color_discrete_map={
+        "PROGRAMADO": "#1f77b4",
+        "RECEBIDO": "#2ca02c"
+    }
     )
 
     fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
@@ -293,6 +297,10 @@ else:
         y="DIFERENÇA",
         color="COR",
         text="DIFERENÇA"
+        color_discrete_map={
+        "Positivo": "green",
+        "Negativo": "red"
+    }
     )
 
     fig.update_traces(texttemplate='%{text:,.0f}', textposition='inside')
