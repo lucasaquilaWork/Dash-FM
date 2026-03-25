@@ -125,134 +125,164 @@ rec = df_filtrado["RECEBIDO"].sum()
 dif = df_filtrado["DIFERENÇA"].sum()
 
 col1, col2, col3 = st.columns(3)
-
 col1.metric("Programado", f"{prog:,.0f}")
 col2.metric("Recebido", f"{rec:,.0f}")
 col3.metric("Diferença", f"{dif:,.0f}")
 
-# -----------------------------
-# 📊 GRÁFICO 1
-# -----------------------------
-st.subheader("📊 Programado x Recebido")
+# =============================
+# 🧠 LÓGICA INTELIGENTE DE VISÃO
+# =============================
 
-df_plot = df_semana.copy()
+df_plot = df_filtrado.copy()
 df_plot["DATA_STR"] = df_plot["DATA"].dt.strftime("%d/%m")
 
-df_melt = df_plot.melt(
-    id_vars="DATA_STR",
-    value_vars=["PROGRAMADO", "RECEBIDO"],
-    var_name="TIPO",
-    value_name="VALOR"
-)
+# -----------------------------
+# 🔎 VISÃO POR DIA
+# -----------------------------
+if dia_selecionado != "TOTAL":
 
-fig = px.bar(
-    df_melt,
-    x="DATA_STR",
-    y="VALOR",
-    color="TIPO",
-    barmode="group",
-    color_discrete_map={
-        "PROGRAMADO": "#1f77b4",
-        "RECEBIDO": "#2ca02c"
-    }
-)
+    st.warning("📍 Visualizando um único dia")
 
-st.plotly_chart(fig, use_container_width=True)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig = px.bar(
+            df_plot.melt(
+                id_vars="DATA_STR",
+                value_vars=["PROGRAMADO", "RECEBIDO"],
+                var_name="TIPO",
+                value_name="VALOR"
+            ),
+            x="TIPO",
+            y="VALOR",
+            color="TIPO",
+            color_discrete_map={
+                "PROGRAMADO": "#1f77b4",
+                "RECEBIDO": "#2ca02c"
+            },
+            title="Programado vs Recebido"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        fig = px.bar(
+            df_plot,
+            x="DATA_STR",
+            y="DIFERENÇA",
+            color=df_plot["DIFERENÇA"].apply(lambda x: "Positivo" if x >= 0 else "Negativo"),
+            color_discrete_map={
+                "Positivo": "green",
+                "Negativo": "red"
+            },
+            title="Diferença"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# 📉 DIFERENÇA
+# 📊 VISÃO TOTAL DA SEMANA
 # -----------------------------
-st.subheader("📉 Diferença")
+else:
 
-df_plot["COR"] = df_plot["DIFERENÇA"].apply(
-    lambda x: "Positivo" if x >= 0 else "Negativo"
-)
+    st.success("📊 Visualização completa da semana")
 
-fig = px.bar(
-    df_plot,
-    x="DATA_STR",
-    y="DIFERENÇA",
-    color="COR",
-    color_discrete_map={
-        "Positivo": "green",
-        "Negativo": "red"
-    }
-)
+    # Programado vs Recebido
+    st.subheader("📊 Programado x Recebido")
 
-st.plotly_chart(fig, use_container_width=True)
+    fig = px.bar(
+        df_plot.melt(
+            id_vars="DATA_STR",
+            value_vars=["PROGRAMADO", "RECEBIDO"],
+            var_name="TIPO",
+            value_name="VALOR"
+        ),
+        x="DATA_STR",
+        y="VALOR",
+        color="TIPO",
+        barmode="group",
+        color_discrete_map={
+            "PROGRAMADO": "#1f77b4",
+            "RECEBIDO": "#2ca02c"
+        }
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------------
-# 📦 BACKLOG
-# -----------------------------
-st.subheader("📦 Backlog")
+    # Diferença
+    st.subheader("📉 Diferença")
 
-df_plot["BACKLOG"] = df_plot["PROGRAMADO"] - df_plot["RECEBIDO"]
+    df_plot["COR"] = df_plot["DIFERENÇA"].apply(
+        lambda x: "Positivo" if x >= 0 else "Negativo"
+    )
 
-fig = px.bar(
-    df_plot,
-    x="DATA_STR",
-    y="BACKLOG",
-    color_discrete_sequence=["orange"]
-)
+    fig = px.bar(
+        df_plot,
+        x="DATA_STR",
+        y="DIFERENÇA",
+        color="COR",
+        color_discrete_map={
+            "Positivo": "green",
+            "Negativo": "red"
+        }
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-st.plotly_chart(fig, use_container_width=True)
+    # Backlog
+    st.subheader("📦 Backlog")
 
-# -----------------------------
-# 📊 TOTAL
-# -----------------------------
-st.subheader("📊 Total da Semana")
+    df_plot["BACKLOG"] = df_plot["PROGRAMADO"] - df_plot["RECEBIDO"]
 
-totais = df_semana[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
-totais.columns = ["TIPO", "VALOR"]
+    fig = px.bar(
+        df_plot,
+        x="DATA_STR",
+        y="BACKLOG",
+        color_discrete_sequence=["orange"]
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-fig = px.bar(
-    totais,
-    x="TIPO",
-    y="VALOR",
-    color="TIPO",
-    color_discrete_map={
-        "PROGRAMADO": "#1f77b4",
-        "RECEBIDO": "#2ca02c",
-        "DIFERENÇA": "#d62728"
-    }
-)
+    # Total
+    st.subheader("📊 Total da Semana")
 
-st.plotly_chart(fig, use_container_width=True)
+    totais = df_plot[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum().reset_index()
+    totais.columns = ["TIPO", "VALOR"]
 
-# -----------------------------
-# 📈 ACUMULADO
-# -----------------------------
-st.subheader("📈 Acumulado")
+    fig = px.bar(
+        totais,
+        x="TIPO",
+        y="VALOR",
+        color="TIPO",
+        color_discrete_map={
+            "PROGRAMADO": "#1f77b4",
+            "RECEBIDO": "#2ca02c",
+            "DIFERENÇA": "#d62728"
+        }
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-df_acum = df_semana.sort_values("DATA").copy()
-df_acum["DATA_STR"] = df_acum["DATA"].dt.strftime("%d/%m")
+    # Acumulado
+    st.subheader("📈 Acumulado")
 
-df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
-df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
+    df_acum = df_plot.sort_values("DATA").copy()
+    df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
+    df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
 
-df_melt = df_acum.melt(
-    id_vars="DATA_STR",
-    value_vars=["PROG_ACUM", "REC_ACUM"],
-    var_name="TIPO",
-    value_name="VALOR"
-)
-
-fig = px.line(
-    df_melt,
-    x="DATA_STR",
-    y="VALOR",
-    color="TIPO",
-    color_discrete_map={
-        "PROG_ACUM": "#1f77b4",
-        "REC_ACUM": "#2ca02c"
-    }
-)
-
-st.plotly_chart(fig, use_container_width=True)
+    fig = px.line(
+        df_acum.melt(
+            id_vars="DATA_STR",
+            value_vars=["PROG_ACUM", "REC_ACUM"],
+            var_name="TIPO",
+            value_name="VALOR"
+        ),
+        x="DATA_STR",
+        y="VALOR",
+        color="TIPO",
+        color_discrete_map={
+            "PROG_ACUM": "#1f77b4",
+            "REC_ACUM": "#2ca02c"
+        }
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
 # 📋 TABELA
 # -----------------------------
 st.subheader("📋 Dados")
-
 st.dataframe(df_filtrado)
