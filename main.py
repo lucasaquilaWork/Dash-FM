@@ -46,7 +46,6 @@ def carregar_dados():
             if df_raw.empty:
                 continue
 
-            # transformar estrutura
             df = df_raw.set_index(df_raw.columns[0]).T.reset_index()
             df = df.rename(columns={"index": "DATA"})
 
@@ -81,9 +80,8 @@ def carregar_dados():
 
     df_final = pd.concat(dados_semanas, ignore_index=True)
 
-    # corrigir DATA (adiciona ano)
+    # corrigir DATA
     ano = datetime.now().year
-
     df_final["DATA"] = df_final["DATA"].astype(str).str.strip()
     df_final["DATA"] = df_final["DATA"] + f"/{ano}"
 
@@ -137,23 +135,57 @@ col2.metric("Recebido", f"{df_filtrado['RECEBIDO'].sum():,.0f}")
 col3.metric("Diferença", f"{df_filtrado['DIFERENÇA'].sum():,.0f}")
 
 # -----------------------------
-# 📈 GRÁFICO
+# 📊 GRÁFICO 1 - BARRA COMPARATIVA
 # -----------------------------
-st.subheader("📈 Programado x Recebido")
+st.subheader("📊 Programado x Recebido por Dia")
 
-grafico = df_filtrado.set_index("DATA")[["PROGRAMADO", "RECEBIDO"]]
-
-st.line_chart(grafico)
+st.bar_chart(
+    df_semana.set_index("DATA")[["PROGRAMADO", "RECEBIDO"]]
+)
 
 # -----------------------------
-# 📦 BACKLOG
+# 📉 GRÁFICO 2 - DIFERENÇA
 # -----------------------------
-df_filtrado = df_filtrado.copy()
-df_filtrado["BACKLOG"] = df_filtrado["PROGRAMADO"] - df_filtrado["RECEBIDO"]
+st.subheader("📉 Diferença por Dia")
 
-st.subheader("📦 Backlog")
+st.bar_chart(
+    df_semana.set_index("DATA")["DIFERENÇA"]
+)
 
-st.bar_chart(df_filtrado.set_index("DATA")["BACKLOG"])
+# -----------------------------
+# 📦 GRÁFICO 3 - BACKLOG
+# -----------------------------
+df_backlog = df_semana.copy()
+df_backlog["BACKLOG"] = df_backlog["PROGRAMADO"] - df_backlog["RECEBIDO"]
+
+st.subheader("📦 Backlog por Dia")
+
+st.bar_chart(
+    df_backlog.set_index("DATA")["BACKLOG"]
+)
+
+# -----------------------------
+# 📊 GRÁFICO 4 - TOTAL SEMANA
+# -----------------------------
+st.subheader("📊 Total da Semana")
+
+totais = df_semana[["PROGRAMADO", "RECEBIDO", "DIFERENÇA"]].sum()
+
+st.bar_chart(totais)
+
+# -----------------------------
+# 📈 GRÁFICO 5 - ACUMULADO
+# -----------------------------
+st.subheader("📈 Acumulado da Semana")
+
+df_acum = df_semana.sort_values("DATA").copy()
+
+df_acum["PROG_ACUM"] = df_acum["PROGRAMADO"].cumsum()
+df_acum["REC_ACUM"] = df_acum["RECEBIDO"].cumsum()
+
+st.line_chart(
+    df_acum.set_index("DATA")[["PROG_ACUM", "REC_ACUM"]]
+)
 
 # -----------------------------
 # 📋 TABELA
